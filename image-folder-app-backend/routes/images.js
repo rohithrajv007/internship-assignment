@@ -105,17 +105,43 @@ router.get('/folder/:folderId/search', auth, async (req, res) => {
 router.get('/folder/:folderId', auth, async (req, res) => {
   try {
     const folderId = req.params.folderId.trim();
-    if (!isValidObjectId(folderId)) {
+
+    // Validate ID format
+    if (!mongoose.Types.ObjectId.isValid(folderId)) {
       return res.status(400).json({ message: 'Invalid folder ID' });
     }
 
-    const images = await Image.find({ folder: folderId, user: req.user.userId, isDeleted: false });
-    res.json(images);
+    // Fetch the folder to get its name + verify ownership
+    const folder = await Folder.findOne({
+      _id: folderId,
+      user: req.user.userId,
+      isDeleted: false
+    });
+
+    if (!folder) {
+      return res.status(404).json({ message: 'Folder not found' });
+    }
+
+    // Fetch images for this folder
+    const images = await Image.find({
+      folder: folderId,
+      user: req.user.userId,
+      isDeleted: false
+    })
+      .sort({ createdAt: -1 }); // newest first
+
+    // Always return consistent shape
+    return res.json({
+      folderName: folder.name,
+      images
+    });
+
   } catch (error) {
     console.error('Get Images Error:', error);
-    res.status(500).json({ message: 'Server error fetching images' });
+    return res.status(500).json({ message: 'Server error fetching images' });
   }
 });
+
 
 /**
  * Soft delete image (move to trash) by setting isDeleted: true
